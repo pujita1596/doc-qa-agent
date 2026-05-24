@@ -55,6 +55,7 @@ doc-qa-agent/
 │   └── sample.txt       # knowledge base document
 ├── chroma_db/           # persisted vector store (generated, not committed)
 ├── .env                 # ANTHROPIC_API_KEY (not committed)
+├── Makefile
 └── requirements.txt
 ```
 
@@ -94,6 +95,8 @@ Drop any `.txt` files into `data/` and pass the path to `ingest()` to add them t
 **Start the API server**
 
 ```bash
+make serve
+# or directly:
 uvicorn main:app --app-dir src --host 0.0.0.0 --port 8000 --reload
 ```
 
