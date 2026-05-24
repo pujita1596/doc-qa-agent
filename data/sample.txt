@@ -1,0 +1,11 @@
+Retrieval-Augmented Generation (RAG) is a technique that improves large language model (LLM) responses by grounding them in external documents. Instead of relying solely on knowledge baked into model weights during training, RAG retrieves relevant text at query time and includes it in the prompt. This allows the model to cite specific sources and reduces hallucination.
+
+A RAG pipeline has two phases. The ingestion phase runs once: documents are split into chunks, each chunk is converted into a vector embedding, and those embeddings are stored in a vector database. The retrieval phase runs per query: the user's question is embedded using the same model, and the vector database returns the chunks whose embeddings are closest to the question embedding.
+
+Vector embeddings are fixed-size arrays of floating-point numbers that capture the semantic meaning of text. Two pieces of text with similar meaning will have embeddings that are close together in vector space, measured by cosine similarity. The model all-MiniLM-L6-v2 produces 384-dimensional embeddings and is widely used for semantic search tasks because it is fast and small enough to run locally.
+
+Chunking strategy matters. If chunks are too large, a retrieved chunk may contain mostly irrelevant text alongside the answer. If chunks are too small, the answer may be split across two chunks and neither contains enough context. A common approach is fixed-size chunking with overlap: each chunk is 300-500 characters, and consecutive chunks share 50-100 characters so that sentences cut at a boundary still appear in full in at least one chunk.
+
+ChromaDB is an open-source vector database that stores embeddings and the original text together. It supports cosine similarity search and persists data to disk. Given a query embedding, ChromaDB returns the top-k most similar stored chunks along with a distance score. A lower distance (or higher cosine similarity) means the chunk is more likely to contain the answer to the query.
+
+The final step in a RAG pipeline is generation: the retrieved chunks are inserted into a prompt alongside the original question, and the LLM is asked to answer using only that context. The model can then cite which chunk its answer came from, making the response traceable and verifiable.
