@@ -92,15 +92,24 @@ def run_agent(question: str, max_iterations: int = 5) -> dict:
             if block.type != "tool_use":
                 continue
 
-            plan.append({"tool": block.name, "query": block.input["query"]})
             print(f"  [agent] calling {block.name}({block.input['query']!r})")
 
             if block.name == "search_documents":
-                result = search_documents(block.input["query"])
+                chunks = retrieve(block.input["query"], n_results=3)
+                sources = list(dict.fromkeys(
+                    c["metadata"].get("source", "") for c in chunks
+                ))
+                result = "\n\n".join(
+                    f"[Source {i+1}, similarity={c['score']}]\n{c['text']}"
+                    for i, c in enumerate(chunks)
+                ) if chunks else "No relevant documents found."
+                plan.append({"tool": block.name, "query": block.input["query"], "sources": sources})
             elif block.name == "web_search":
                 result = web_search(block.input["query"])
+                plan.append({"tool": block.name, "query": block.input["query"], "sources": []})
             else:
                 result = "Unknown tool."
+                plan.append({"tool": block.name, "query": block.input["query"], "sources": []})
 
             tool_results.append({
                 "type": "tool_result",

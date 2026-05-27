@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doc Q&A</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 16px 40px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #111;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 36px;
+    }
+
+    .search-box {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 1rem;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+      background: #fff;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #555;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #333; }
+    button:disabled { background: #999; cursor: not-allowed; }
+
+    .result-area {
+      width: 100%;
+      max-width: 680px;
+      margin-top: 28px;
+    }
+
+    .spinner {
+      display: none;
+      text-align: center;
+      color: #888;
+      font-size: 0.9rem;
+      padding: 20px;
+    }
+
+    .answer-card {
+      background: #fff;
+      border: 1.5px solid #e5e5e5;
+      border-radius: 10px;
+      padding: 24px;
+      display: none;
+    }
+
+    .answer-card h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 12px;
+    }
+
+    .answer-text {
+      font-size: 0.97rem;
+      line-height: 1.65;
+      color: #222;
+    }
+
+    .answer-text h1, .answer-text h2, .answer-text h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 14px 0 6px;
+      color: #111;
+    }
+
+    .answer-text p { margin-bottom: 10px; }
+
+    .answer-text ul, .answer-text ol {
+      padding-left: 20px;
+      margin-bottom: 10px;
+    }
+
+    .answer-text li { margin-bottom: 4px; }
+
+    .answer-text strong { font-weight: 600; }
+
+    .answer-text code {
+      background: #f0f0f0;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.88em;
+      font-family: monospace;
+    }
+
+    .plan-section {
+      margin-top: 20px;
+      border-top: 1px solid #eee;
+      padding-top: 16px;
+      display: none;
+    }
+
+    .plan-section h3 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      margin-bottom: 10px;
+    }
+
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      color: #444;
+      margin: 3px 4px 3px 0;
+    }
+
+    .tool-chip .tool-name {
+      font-weight: 600;
+      color: #111;
+    }
+
+    .tool-chip .tool-query { color: #555; }
+
+    .tool-chip .source-sep { color: #aaa; }
+
+    .source-link {
+      color: #0066cc;
+      text-decoration: none;
+      font-size: 0.78rem;
+      border-bottom: 1px dashed #0066cc;
+    }
+
+    .source-link:hover { color: #004499; }
+
+    .error-card {
+      background: #fff5f5;
+      border: 1.5px solid #fcc;
+      border-radius: 10px;
+      padding: 18px 24px;
+      color: #c00;
+      font-size: 0.9rem;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Doc Q&amp;A</h1>
+  <p class="subtitle">Ask a question about your documents</p>
+
+  <div class="search-box">
+    <input
+      type="text"
+      id="question"
+      placeholder="What is RAG? How does chunking work?"
+      autofocus
+    />
+    <button id="ask-btn" onclick="ask()">Ask</button>
+  </div>
+
+  <div class="result-area">
+    <div class="spinner" id="spinner">Searching your documents&hellip;</div>
+    <div class="error-card" id="error-card"></div>
+    <div class="answer-card" id="answer-card">
+      <h2>Answer</h2>
+      <div class="answer-text" id="answer-text"></div>
+      <div class="plan-section" id="plan-section">
+        <h3>Tools used</h3>
+        <div id="plan-chips"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const input   = document.getElementById("question");
+    const btn     = document.getElementById("ask-btn");
+    const spinner = document.getElementById("spinner");
+    const card    = document.getElementById("answer-card");
+    const errCard = document.getElementById("error-card");
+    const ansText = document.getElementById("answer-text");
+    const planSec = document.getElementById("plan-section");
+    const chips   = document.getElementById("plan-chips");
+
+    input.addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+
+    function openFile(e, path) {
+      e.preventDefault();
+      fetch("/open?path=" + encodeURIComponent(path));
+    }
+
+    function setLoading(on) {
+      btn.disabled = on;
+      btn.textContent = on ? "..." : "Ask";
+      spinner.style.display = on ? "block" : "none";
+      if (on) {
+        card.style.display = "none";
+        errCard.style.display = "none";
+      }
+    }
+
+    async function ask() {
+      const q = input.value.trim();
+      if (!q) return;
+
+      setLoading(true);
+
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || "Request failed");
+        }
+
+        const data = await res.json();
+        ansText.innerHTML = marked.parse(data.answer);
+        card.style.display = "block";
+
+        // Show tool plan if any
+        if (data.plan && data.plan.length > 0) {
+          chips.innerHTML = data.plan.map(p => {
+            const sourceLinks = (p.sources || []).map(src => {
+              const name = src.split("/").pop();
+              return `<a class="source-link" href="#" onclick="openFile(event,'${src.replace(/'/g,"\\'")}')">&#128196; ${name}</a>`;
+            }).join("");
+            return `<div class="tool-chip">
+              <span class="tool-name">${p.tool}</span>
+              <span class="tool-query">"${p.query}"</span>
+              ${sourceLinks ? `<span class="source-sep">→</span>${sourceLinks}` : ""}
+            </div>`;
+          }).join("");
+          planSec.style.display = "block";
+        } else {
+          planSec.style.display = "none";
+        }
+      } catch (err) {
+        errCard.textContent = "Error: " + err.message;
+        errCard.style.display = "block";
+      } finally {
+        setLoading(false);
+      }
+    }
+  </script>
+</body>
+</html>
