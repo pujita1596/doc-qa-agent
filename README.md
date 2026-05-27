@@ -2,38 +2,40 @@
 
 An AI-powered document Q&A system built from scratch to demonstrate RAG, agents, and evaluation — no orchestration frameworks.
 
-A user asks a question. An agent decides whether to search the internal document knowledge base or the web, retrieves relevant context, and returns a grounded answer with citations and a full decision trace.
+Ask a question in the browser. An agent searches your private local documents (or the web as a fallback), returns a grounded answer with citations, and links directly to the source files.
 
 ---
 
 ## Architecture
 
 ```
-User question
-     │
-     ▼
-Agent (Claude)  ←── system prompt: always search documents first
-     │
-     ├── search_documents(query)
-     │       └── embed query → ChromaDB cosine search → top-3 chunks
-     │
-     └── web_search(query)          ← fallback if docs have no answer
-             └── DuckDuckGo (ddgs)
-     │
-     ▼
-Grounded answer + citations + agent plan
+User question (browser UI)
+        │
+        ▼
+   Agent (Claude)  ←── system prompt: always search documents first
+        │
+        ├── search_documents(query)
+        │       └── embed query → ChromaDB cosine search → top-3 chunks
+        │                                └── returns source file paths
+        └── web_search(query)          ← fallback if docs have no answer
+                └── DuckDuckGo (ddgs)
+        │
+        ▼
+Grounded answer + citations + agent plan with clickable source links
 ```
 
 **RAG pipeline** (built from scratch):
 - Fixed-size chunking with overlap (500 chars / 100 char overlap)
-- Embeddings via `all-MiniLM-L6-v2` (384-dim, runs locally)
+- Embeddings via `all-MiniLM-L6-v2` (384-dim, runs fully locally)
 - Vector store: ChromaDB with cosine similarity
 
 **Agent layer**: Claude tool use API — two tools, agentic loop with `max_iterations` guard
 
-**Eval pipeline**: LLM-as-judge scoring faithfulness and answer relevancy across 10 test queries
+**Eval pipeline**: LLM-as-judge scoring for faithfulness and answer relevancy
 
-**API**: FastAPI `POST /ask` returning `answer`, `plan`
+**Benchmark suite**: 3 controlled experiments measuring how chunking strategy, top-k, and prompt strictness affect quality
+
+**Web UI**: Simple browser search bar served directly from FastAPI — no frontend framework
 
 ---
 
@@ -42,17 +44,24 @@ Grounded answer + citations + agent plan
 ```
 doc-qa-agent/
 ├── src/
-│   ├── ingest.py        # chunk → embed → store in ChromaDB
+│   ├── ingest.py        # chunk → embed → store in ChromaDB (.txt, .pdf, .docx)
 │   ├── retriever.py     # embed query → cosine search → top-k chunks
 │   ├── qa.py            # retriever + Claude → grounded answer (no agent)
 │   ├── agent.py         # Claude with search_documents + web_search tools
-│   ├── main.py          # FastAPI app
-│   └── test_setup.py    # Anthropic API smoke test
+│   ├── main.py          # FastAPI app + serves web UI
+│   ├── watcher.py       # watches ~/Downloads, auto-ingests new files
+│   ├── test_setup.py    # Anthropic API smoke test
+│   └── static/
+│       └── index.html   # browser search UI
 ├── evals/
 │   ├── eval_pipeline.py # 10-question LLM-as-judge eval
+│   ├── run_benchmarks.py# 3 experiments: chunking / top-k / prompt strictness
 │   └── eval_results.json
 ├── data/
-│   └── sample.txt       # knowledge base document
+│   ├── sample.txt                    # RAG concepts
+│   ├── python_best_practices.txt     # Python patterns
+│   ├── machine_learning_fundamentals.txt
+│   └── fastapi_and_apis.txt
 ├── chroma_db/           # persisted vector store (generated, not committed)
 ├── .env                 # ANTHROPIC_API_KEY (not committed)
 ├── Makefile
@@ -82,25 +91,29 @@ echo "ANTHROPIC_API_KEY=your-key-here" > .env
 **3. Ingest documents**
 
 ```bash
-python src/ingest.py
-# Ingested 6 chunks from data/sample.txt
+make ingest
+# Ingested N chunks from sample.txt
 ```
 
-Drop any `.txt` files into `data/` and pass the path to `ingest()` to add them to the knowledge base.
+Drop `.txt`, `.pdf`, or `.docx` files into `data/` and run `make ingest` to add them.
 
 ---
 
 ## Usage
 
-**Start the API server**
+**Start the server**
 
 ```bash
 make serve
-# or directly:
-uvicorn main:app --app-dir src --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Ask a question**
+Open **http://localhost:8000** in your browser. Type a question and press Enter.
+
+The answer renders with full markdown formatting. The "Tools used" section shows which tool was called, the query, and clickable links to the source documents that were retrieved.
+
+---
+
+**API** (for programmatic use)
 
 ```bash
 curl -X POST http://localhost:8000/ask \
@@ -108,77 +121,84 @@ curl -X POST http://localhost:8000/ask \
   -d '{"question": "How does chunk overlap prevent context loss?"}'
 ```
 
-**Response**
-
 ```json
 {
-  "answer": "Chunk overlap ensures that sentences split at a boundary still appear in full in at least one chunk [1]. Consecutive chunks share 50–100 characters so no information is lost at the edges.",
+  "answer": "Chunk overlap ensures sentences split at a boundary still appear complete in at least one chunk [1]...",
   "plan": [
-    {"tool": "search_documents", "query": "chunk overlap context loss"}
+    {
+      "tool": "search_documents",
+      "query": "chunk overlap context loss",
+      "sources": ["/abs/path/to/data/sample.txt"]
+    }
   ]
 }
 ```
 
-**Health check**
+---
+
+## Auto-ingest from Downloads
+
+Run the watcher in a separate terminal. Any `.txt`, `.pdf`, or `.docx` file dropped into `~/Downloads` is automatically ingested into the knowledge base.
 
 ```bash
-curl http://localhost:8000/health
-# {"status": "ok"}
+make watch
+# Watching /Users/you/Downloads for new .txt, .pdf, .docx files...
 ```
 
 ---
 
 ## Evaluation
 
-Runs 10 test questions through the agent, then scores each answer with Claude as the judge.
+**Eval pipeline** — 10 test questions, LLM-as-judge scoring:
 
 ```bash
-python evals/eval_pipeline.py
+make eval
 ```
-
-**Metrics**
-
-| Metric | What it measures |
-|---|---|
-| **Faithfulness** | Fraction of answer claims that are grounded in retrieved context |
-| **Answer relevancy** | How directly the answer addresses the question |
-
-**Results on sample.txt**
 
 | Metric | Score |
 |---|---|
 | Avg faithfulness | 0.78 |
 | Avg answer relevancy | 0.96 |
 
-Full per-question results saved to `evals/eval_results.json`.
+Full results saved to `evals/eval_results.json`.
+
+**Benchmark suite** — 3 controlled experiments:
+
+```bash
+make benchmark
+```
+
+| Experiment | What varies | Fixed |
+|---|---|---|
+| 1 | Chunk size (256 / 500 / 1000) | k=3, current prompt |
+| 2 | Top-k retrieval (1 / 3 / 5 / 10) | best chunk config |
+| 3 | Prompt strictness (loose / current / strict) | best chunk + k |
+
+Results saved to `evals/benchmark_results.json` and `evals/benchmark_summary.md`.
 
 ---
 
 ## Key design decisions
 
-**No orchestration framework.** RAG is implemented from scratch — chunking, embedding, vector search, prompt construction. This makes every step inspectable and debuggable.
+**No orchestration framework.** RAG is implemented from scratch — chunking, embedding, vector search, prompt construction. Every step is inspectable and debuggable.
 
-**LLM-as-judge eval instead of RAGAS.** Same metrics (faithfulness, answer relevancy), implemented directly with Claude as the evaluator. No extra framework dependency, and the scoring logic is fully visible.
+**LLM-as-judge eval instead of RAGAS.** Same metrics (faithfulness, answer relevancy), implemented directly with Claude as the evaluator. No extra framework dependency, scoring logic fully visible.
 
-**Cosine similarity, not L2.** ChromaDB is configured with `hnsw:space: cosine`. Cosine measures the angle between vectors (semantic direction), not magnitude — more appropriate for text embeddings.
+**Cosine similarity, not L2.** ChromaDB is configured with `hnsw:space: cosine`. Cosine measures semantic direction, not magnitude — more appropriate for text embeddings.
 
 **Overlap chunking.** 100-character overlap between 500-character chunks ensures sentences cut at boundaries still appear complete in at least one chunk.
 
-**System prompt forces tool use.** Without an explicit instruction, Claude answers from training knowledge. The system prompt ensures it always calls `search_documents` first, making it a true RAG system rather than a chatbot.
+**System prompt forces tool use.** Without explicit instruction, Claude answers from training knowledge. The system prompt ensures it always calls `search_documents` first, making it a true RAG system.
+
+**Deduplication on ingest.** `already_ingested()` checks ChromaDB metadata before embedding, so re-running `make ingest` or the watcher on an already-loaded file is a no-op.
 
 ---
 
 ## Add your own documents
 
-1. Place any `.txt` file in `data/`
-2. Call `ingest()` with the path:
-   ```python
-   # in src/ingest.py __main__, or from a script:
-   from ingest import ingest
-   ingest("data/yourfile.txt")
-   ```
-3. The new chunks are added to the existing ChromaDB collection — no need to re-ingest previous files
+1. Drop any `.txt`, `.pdf`, or `.docx` file into `data/`
+2. Run `make ingest`
 
-> **Note:** `chroma_db/` is gitignored. Every fresh clone must run `python src/ingest.py` before the API will return answers. The setup instructions above cover this.
+Or use the watcher — any file saved to `~/Downloads` is ingested automatically.
 
-PDF support can be added with `pypdf` — `load_text()` in [src/ingest.py](src/ingest.py) is the only function that needs updating.
+> `chroma_db/` is gitignored. Every fresh clone needs `make ingest` before the API returns answers.
