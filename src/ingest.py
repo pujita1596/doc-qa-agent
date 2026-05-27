@@ -2,9 +2,24 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx"}
 
-def load_text(path: str) -> str:
-    return Path(path).read_text()
+_CHROMA_PATH = str(Path(__file__).resolve().parent.parent / "chroma_db")
+
+
+def load_file(path: str) -> str:
+    p = Path(path)
+    if p.suffix == ".txt":
+        return p.read_text(errors="ignore")
+    if p.suffix == ".pdf":
+        from pypdf import PdfReader
+        reader = PdfReader(str(p))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    if p.suffix == ".docx":
+        from docx import Document
+        doc = Document(str(p))
+        return "\n".join(para.text for para in doc.paragraphs)
+    raise ValueError(f"Unsupported file type: {p.suffix}")
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
@@ -14,33 +29,47 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str
     while start < len(text):
         chunks.append(text[start : start + chunk_size])
         start += chunk_size - overlap
-    return chunks
+    return [c for c in chunks if c.strip()]  # drop whitespace-only chunks
+
+
+def already_ingested(collection, doc_path: str) -> bool:
+    results = collection.get(where={"source": doc_path}, limit=1)
+    return len(results["ids"]) > 0
 
 
 def ingest(doc_path: str, collection_name: str = "documents") -> None:
-    text = load_text(doc_path)
-    chunks = chunk_text(text)
+    p = Path(doc_path)
+    if p.suffix not in SUPPORTED_EXTENSIONS:
+        print(f"Skipping unsupported file type: {p.name}")
+        return
 
-    # Embed each chunk — same model must be used at retrieval time
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    embeddings = model.encode(chunks).tolist()
-
-    # PersistentClient writes to disk so embeddings survive between runs
-    chroma_path = str(Path(__file__).resolve().parent.parent / "chroma_db")
-    client = chromadb.PersistentClient(path=chroma_path)
+    client = chromadb.PersistentClient(path=_CHROMA_PATH)
     collection = client.get_or_create_collection(
         name=collection_name,
-        metadata={"hnsw:space": "cosine"},  # use cosine similarity, not L2
+        metadata={"hnsw:space": "cosine"},
     )
+
+    if already_ingested(collection, str(p.resolve())):
+        print(f"Already ingested, skipping: {p.name}")
+        return
+
+    text = load_file(doc_path)
+    if not text.strip():
+        print(f"No text extracted from {p.name}, skipping.")
+        return
+
+    chunks = chunk_text(text)
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    embeddings = model.encode(chunks).tolist()
 
     collection.add(
         documents=chunks,
         embeddings=embeddings,
-        ids=[f"chunk_{i}" for i in range(len(chunks))],
-        metadatas=[{"source": doc_path, "chunk_index": i} for i in range(len(chunks))],
+        ids=[f"{p.stem}_{i}" for i in range(len(chunks))],
+        metadatas=[{"source": str(p.resolve()), "filename": p.name, "chunk_index": i} for i in range(len(chunks))],
     )
 
-    print(f"Ingested {len(chunks)} chunks from {doc_path}")
+    print(f"Ingested {len(chunks)} chunks from {p.name}")
 
 
 if __name__ == "__main__":

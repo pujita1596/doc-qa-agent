@@ -1,0 +1,21 @@
+FastAPI and Building APIs
+
+FastAPI is a modern Python web framework for building APIs. It uses Python type hints to automatically validate request and response data, generate OpenAPI documentation, and provide editor autocomplete. It is built on Starlette (ASGI) and Pydantic.
+
+Route decorators define endpoints. `@app.get("/path")` handles GET requests. `@app.post("/path")` handles POST requests. The function return value is automatically serialized to JSON. Use `response_model=MySchema` to enforce and document the response shape.
+
+Pydantic models define the shape of request and response bodies. Any class inheriting from `BaseModel` automatically validates incoming JSON, converts types, and produces clear error messages for invalid input. Fields can have defaults, validation rules, and descriptions.
+
+Path parameters are part of the URL: `@app.get("/items/{item_id}")`. Query parameters are optional URL parameters after `?`: `def search(q: str, limit: int = 10)`. Request body parameters come from JSON in the request body using a Pydantic model.
+
+HTTPException raises an HTTP error response: `raise HTTPException(status_code=400, detail="bad request")`. FastAPI serializes the detail field to JSON automatically. Use 400 for bad input, 404 for not found, 422 for validation errors, 500 for server errors.
+
+Static files are served using `StaticFiles`. Mount them at a path: `app.mount("/static", StaticFiles(directory="static"), name="static")`. FileResponse returns a file from disk: `return FileResponse("static/index.html")`.
+
+Uvicorn is an ASGI server that runs FastAPI applications. Run with `uvicorn main:app --reload` for development (auto-reloads on code changes) or `uvicorn main:app --host 0.0.0.0 --port 8000` for production. The `--app-dir src` flag adds a directory to sys.path, enabling flat imports within that directory.
+
+Dependency injection via `Depends` shares logic across routes. Common use cases: database sessions, authentication checks, shared configuration. FastAPI resolves dependencies automatically based on function signatures.
+
+CORS (Cross-Origin Resource Sharing) must be configured if your frontend is served from a different origin than the API. Add `CORSMiddleware` with the allowed origins, methods, and headers. For local development, allowing all origins is fine; restrict this in production.
+
+The automatic documentation at `/docs` (Swagger UI) and `/redoc` (ReDoc) is generated from your type hints and docstrings without any extra work. This makes FastAPI APIs self-documenting and easy to test interactively without curl or Postman.

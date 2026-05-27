@@ -1,0 +1,21 @@
+Machine Learning Fundamentals
+
+Supervised learning trains a model on labeled examples — input-output pairs — so it can predict outputs for new inputs. Common tasks include classification (predicting a category) and regression (predicting a number). The model learns by minimizing a loss function that measures how far its predictions are from the true labels.
+
+A training set is used to fit the model. A validation set is used to tune hyperparameters and catch overfitting during training. A test set is held out completely and used only once to measure final performance. Mixing these sets leads to overly optimistic accuracy estimates.
+
+Overfitting happens when a model memorizes the training data instead of learning generalizable patterns. Signs: high training accuracy, much lower validation accuracy. Fixes include regularization (L1/L2), dropout in neural networks, early stopping, and getting more training data.
+
+Underfitting happens when the model is too simple to capture the patterns in the data. Signs: low training and validation accuracy. Fixes include using a more complex model, training longer, or engineering better features.
+
+Feature engineering transforms raw data into inputs the model can use effectively. Normalize numerical features to zero mean and unit variance so no feature dominates due to scale. One-hot encode categorical variables. For text, use embeddings (dense vectors) rather than raw word counts when semantic meaning matters.
+
+Gradient descent is the optimization algorithm used to train most models. It computes the gradient of the loss with respect to model parameters and takes a small step in the opposite direction. The learning rate controls step size — too large causes divergence, too small causes slow convergence. Adam is the most commonly used variant because it adapts the learning rate per parameter.
+
+Neural networks are composed of layers of neurons. Each neuron computes a weighted sum of its inputs and applies an activation function (ReLU, sigmoid, softmax). Deep networks (many layers) can learn complex hierarchical representations. Transformers are a neural network architecture that uses self-attention and are the foundation of all modern large language models.
+
+Large language models (LLMs) like GPT and Claude are transformer-based models trained on vast text corpora to predict the next token. Fine-tuning adapts a pretrained LLM to a specific task by continuing training on task-specific data. Retrieval-Augmented Generation (RAG) is an alternative: instead of baking knowledge into weights, you retrieve relevant documents at inference time and include them in the prompt.
+
+Embeddings are dense vector representations of data. Word embeddings (Word2Vec, GloVe) capture word meaning. Sentence embeddings (BERT, all-MiniLM-L6-v2) encode the meaning of entire sentences into a single vector. Two semantically similar sentences will have embeddings with high cosine similarity.
+
+Evaluation metrics depend on the task. For classification: accuracy, precision, recall, F1-score. For regression: mean squared error (MSE), mean absolute error (MAE). For language model outputs: BLEU, ROUGE, or LLM-as-judge approaches where another model scores the output for faithfulness and relevance.

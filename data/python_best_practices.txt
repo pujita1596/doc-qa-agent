@@ -1,0 +1,21 @@
+Python Best Practices and Clean Code
+
+Virtual environments isolate project dependencies so different projects can use different package versions without conflicts. Always create a virtual environment per project using `python -m venv .venv` and activate it before installing anything. Never install packages into the global Python installation.
+
+Type hints improve readability and enable static analysis tools like mypy to catch bugs before runtime. Add type hints to all function signatures: `def chunk_text(text: str, size: int) -> list[str]`. For complex types, use the `typing` module or the newer built-in generics (`list[str]` instead of `List[str]` in Python 3.9+).
+
+Pathlib is the modern way to handle file paths. Use `Path(__file__).resolve().parent` to get the directory of the current file, which works correctly regardless of the working directory. Avoid string concatenation for paths — `Path("data") / "file.txt"` is cleaner and cross-platform.
+
+Dataclasses reduce boilerplate for simple data containers. Use `@dataclass` to automatically generate `__init__`, `__repr__`, and `__eq__`. For immutable objects, use `@dataclass(frozen=True)`. For more complex needs like validation and serialization, Pydantic's `BaseModel` is the industry standard.
+
+Environment variables store secrets like API keys. Use `python-dotenv` to load a `.env` file in development. Never hardcode secrets in source code. The `.env` file should always be in `.gitignore`.
+
+List comprehensions are more Pythonic and often faster than equivalent for loops: `[x * 2 for x in items if x > 0]`. Generator expressions (`(x for x in items)`) are more memory-efficient when you only need to iterate once.
+
+Context managers (the `with` statement) guarantee cleanup even when exceptions occur. Use them for file handles, database connections, and locks. Implement your own with `__enter__` and `__exit__`, or use `contextlib.contextmanager` for a generator-based approach.
+
+Error handling should be specific. Catch `ValueError` not bare `Exception`. Re-raise exceptions you can't handle meaningfully. Log the full traceback with `logging.exception("...")` inside except blocks so you don't lose context.
+
+Module-level code runs at import time, so keep it minimal. Move expensive initialization (loading models, connecting to databases) inside functions or use module-level singletons carefully. Loading a SentenceTransformer model at import time is acceptable if the module is always needed; avoid it for rarely-used modules.
+
+Testing with pytest: name test files `test_*.py`, name test functions `test_*`. Use fixtures to share setup. Prefer integration tests over mocks for external dependencies when possible — mocks can hide real integration bugs.
